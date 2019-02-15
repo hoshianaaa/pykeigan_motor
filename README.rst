@@ -22,7 +22,7 @@ USB Serial
 .. code-block:: python
 
   from pykeigan_motor import KMControllers
-  dev=KMControllers.USBContoller('/dev/ttyUSB0')
+  dev=KMControllers.USBController('/dev/ttyUSB0')
   dev.enable()
   dev.speed(1.0)
   dev.runForward()

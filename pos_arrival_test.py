@@ -76,7 +76,7 @@ def on_motor_measurement_cb(measurement):
 
 dev=usbcontroller.USBController(select_port())
 dev.on_motor_log_cb = on_motor_log_cb
-#dev.on_motor_measurement_value_cb = on_motor_measurement_cb
+dev.on_motor_measurement_value_cb = on_motor_measurement_cb
 dev.enable_action() 
 dev.set_speed(utils.rpm2rad_per_sec(200))
 dev.move_to_pos(utils.deg2rad(1080))

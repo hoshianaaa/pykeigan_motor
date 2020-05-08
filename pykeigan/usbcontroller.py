@@ -4,8 +4,7 @@
 Created on Thu Jan 10 09:13:24 2018
 
 @author: takata@innovotion.co.jp
-@author: Hiroshi Harada (Keigan Inc.)
-@author: Takashi Tokuda (Keigan Inc.)
+@author: harada@keigan.co.jp
 """
 from pykeigan import controller as base
 import serial, struct, threading, atexit, time
@@ -13,7 +12,7 @@ from pykeigan.utils import *
 
 
 class USBController(base.Controller):
-    def __init__(self, port='/dev/ttyUSB0',debug_mode=False, baud=115200):
+    def __init__(self, port='/dev/ttyUSB0',debug_mode=False):
         self.DebugMode = debug_mode
         self.serial_buf = b''  # []
         self.setting_values = {}
@@ -23,7 +22,7 @@ class USBController(base.Controller):
         self.__motor_event_value = None
         self.__read_motion_value = []
         self.port = port
-        self.serial = serial.Serial(port, baud, 8, 'N', 1, None, False, True)
+        self.serial = serial.Serial(port, 115200, 8, 'N', 1, None, False, True)
         self.on_motor_measurement_value_cb = False
         self.on_motor_imu_measurement_cb = False
         self.on_motor_connection_error_cb = False
@@ -38,10 +37,8 @@ class USBController(base.Controller):
     def connect(self):
         """
         Open the USB port.
-        Should be after disconnection.
         """
-        self.serial.open()
-        self.start_auto_serial_reading()
+        self.serial = serial.Serial(self.port, 115200, 8, 'N', 1, None, False, True)
 
     def disconnect(self):
         """
@@ -104,7 +101,6 @@ class USBController(base.Controller):
 
     def __serial_schedule_worker(self):
         while True:
-            print('__serial_schedule_worker')
             time.sleep(0.1)  # 100ms
             e_res = self.__read_serial_data()
             if e_res or self.auto_serial_reading == False:  # 例外発生でスレッド停止
@@ -152,7 +148,6 @@ class USBController(base.Controller):
             return
 
         slice_idx = bf_len  # 抽出済みとしてバッファーから削除するインデックス
-        success = False
 
         i = 0
         while i < bf_len-3:
@@ -165,14 +160,13 @@ class USBController(base.Controller):
                     if self.serial_buf[ie + 2:ie+4] == b'\x0d\x0a':
                         # crc = self.serial_buf[ie] << 8 | self.serial_buf[ie + 1]  # CRC
                         payload = self.serial_buf[i + 4: ie]  # 情報バイト
-                        success = self.__serialdataParse(payload)
+                        self.__serialdataParse(payload)
                         slice_idx = ie + 4
                         i = ie + 3
                         is_pre = False
                         break
             i += 1
         self.serial_buf = self.serial_buf[slice_idx:]
-        return success
 
     def __serialdataParse(self, byte_array):
         v_len = len(byte_array)
@@ -237,6 +231,7 @@ class USBController(base.Controller):
         elif datatype == 0xBE:  # command log (Error or Success information)
             self.__motor_log_value={'command_names':self.command_names[bytes2uint8_t(payload[2:3])],'error_codes':self.error_codes[bytes2uint32_t(payload[3:7])]}
             if (callable(self.on_motor_log_cb)):
+                
                 self.on_motor_log_cb(self.__motor_log_value)
             if self.DebugMode:
                 print(self.__motor_log_value['command_names'],self.__motor_log_value['error_codes'])
@@ -279,20 +274,17 @@ class USBController(base.Controller):
         if not (comm in valid_comms):
             raise ValueError("Unknown Command")
         self.read_register(comm)
-        time.sleep(0.02)
-        k = self.__read_serial_data()
-        if k:
-            print(k)
-            if comm in self.setting_values.keys():
-                val, received_unix_time = self.setting_values[comm]
+        time.sleep(0.15)
+        if not self.auto_serial_reading:
+            raise ValueError("Disabled reading serial data. Try calling start_auto_serial_reading()")
+        if comm in self.setting_values.keys():
+            val, received_unix_time = self.setting_values[comm]
             if time.time() - received_unix_time < validation_threshold:
                 return val
             else:
                 raise ValueError("No data within ", validation_threshold, " sec")
         else:
             raise ValueError("No data received")
-
-        
 
     def __read_measurement_value(self, comm, validation_threshold=1.0):
         measurement_value=None

@@ -87,6 +87,8 @@ def read_pid_settings(motor):
     print('position PID control threshold: ', threshold)
 
 dev = usbcontroller.USBController(select_port())
+name = dev.read_device_name()  # モータ1から値を読み込む
+print('Device name: ', name)
 read_pid_settings(dev)
 
 while True:

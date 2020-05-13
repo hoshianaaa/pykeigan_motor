@@ -28,6 +28,7 @@ class USBController(base.Controller):
         self.try_reconnect = False
         self.reconn_err_cnt = 0
         self.total_reconnect_cnt = 0
+        self.is_reading_reg = False
         self.serial = serial.Serial(port, baud, 8, 'N', 1, None, False, True)
         self.on_motor_measurement_value_cb = False
         self.on_motor_imu_measurement_cb = False
@@ -140,11 +141,12 @@ class USBController(base.Controller):
 
     def __serial_schedule_worker(self):
         while True:
-            time.sleep(self.read_serial_polling_time) # less than minimum motor measurement interval
-            e_res = self.__read_serial_data()
-            if e_res :  # 例外発生でスレッド停止
-                self.auto_serial_reading = False
-                break
+            if not self.is_reading_reg:
+                time.sleep(self.read_serial_polling_time) # less than minimum motor measurement interval
+                e_res = self.__read_serial_data()
+                if e_res :  # 例外発生でスレッド停止
+                    self.auto_serial_reading = False
+                    break
 
 
     def __read_serial_data(self):
@@ -187,6 +189,7 @@ class USBController(base.Controller):
         # ------------------------------#
 
         bf_len = len(self.serial_buf)
+        print(bf_len)
         is_pre = False  # プリアンブル検出したか
         if (bf_len < 8):
             return
@@ -206,12 +209,14 @@ class USBController(base.Controller):
                         # crc = self.serial_buf[ie] << 8 | self.serial_buf[ie + 1]  # CRC
                         payload = self.serial_buf[i + 4: ie]  # 情報バイト
                         success = self.__serialdataParse(payload)
+                        print('success', success)
                         slice_idx = ie + 4
                         i = ie + 3
                         is_pre = False
                         break
             i += 1
         self.serial_buf = self.serial_buf[slice_idx:]
+        return success
 
     def __serialdataParse(self, byte_array):
         v_len = len(byte_array)
@@ -317,18 +322,22 @@ class USBController(base.Controller):
         valid_comms.extend(float_value_comms)
         if not (comm in valid_comms):
             raise ValueError("Unknown Command")
+        self.is_reading_reg = True
         self.read_register(comm)
-        time.sleep(0.15)
-        if not self.auto_serial_reading:
-            raise ValueError("Disabled reading serial data. Try calling start_auto_serial_reading()")
-        if comm in self.setting_values.keys():
-            val, received_unix_time = self.setting_values[comm]
+        time.sleep(0.1)
+        k = self.__read_serial_data()
+        self.is_reading_reg = False
+        if k:
+            print(k)
+            if comm in self.setting_values.keys():
+                val, received_unix_time = self.setting_values[comm]
             if time.time() - received_unix_time < validation_threshold:
                 return val
             else:
                 raise ValueError("No data within ", validation_threshold, " sec")
         else:
             raise ValueError("No data received")
+
             
 
         

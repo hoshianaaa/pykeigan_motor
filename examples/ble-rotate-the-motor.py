@@ -23,9 +23,9 @@ from pykeigan import utils
 
 """
 
-dev=blecontroller.BLEController("d1:5a:fa:a7:d9:5d")#モーターのMACアドレス 参照 ble-simple-connection.py
+dev=blecontroller.BLEController("fe:e1:8c:0a:7d:a0")#モーターのMACアドレス 参照 ble-simple-connection.py
 dev.enable_action()#安全装置。初めてモーターを動作させる場合に必ず必要。
-dev.set_speed(utils.rpm2rad_per_sec(5))#rpm -> radian/sec
+dev.set_speed(utils.rpm2rad_per_sec(1))#rpm -> radian/sec
 
 dev.set_led(1, 0, 200, 0)
 dev.run_forward()

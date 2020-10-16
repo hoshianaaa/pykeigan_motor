@@ -38,7 +38,8 @@ def get_motor_informations():
         sleep(0.5)
 
 #接続
-dev=blecontroller.BLEController("d1:5a:fa:a7:d9:5d")#モーターのMACアドレス 参照 ble-simple-connection.py
+dev=blecontroller.BLEController("fe:e1:8c:0a:7d:a0")#下モータ
+#dev=blecontroller.BLEController("ef:23:f5:42:8f:be")#上モータ
 dev.set_led(2,255,255,0)
 dev.enable_continual_imu_measurement()#IMUは通知をOnにする必要がある
 sleep(0.5)

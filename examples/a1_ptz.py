@@ -22,35 +22,63 @@ import serial
 up_pos = 10000
 down_pos = 10000
 
-def get_motor_informations():
-    global down_pos
-    global up_pos
-    while True:
-        if up:
-            m = up.read_motor_measurement()
-            up_pos = m.pop("position")
-#            print("up_pos:",up_pos)
+up_init_pos = 0.26
+down_init_pos = -0
 
-        if down:
-            m = down.read_motor_measurement()
-            down_pos = m.pop("position")
-            print("down_pos:",down_pos)
-
-        sleep(0.1)
+TIMEOUT = 300 # milli
 
 port_name = '/dev/vircom2'
 sp = serial.Serial(port_name, 9600)
 
-def get_message(m=''):
+def get_motor_informations():
+    global down_pos,up_pos
+    global down_init_pos,up_init_pos
+    global sp
+    while True:
+        if up:
+            m = up.read_motor_measurement()
+            up_pos = m.pop("position")
+            up_torque = m.pop("torque")
+            #print("up_pos:",up_pos)
+            #print("up_torque:",up_torque)
+
+        if down:
+            m = down.read_motor_measurement()
+            down_pos = m.pop("position")
+            down_torque = m.pop("torque")
+            #print("down_pos:",down_pos)
+            #print("down_torque:",down_torque)
+
+        down_deg = utils.rad2deg(down_pos - down_init_pos)
+        up_deg = utils.rad2deg(up_pos - up_init_pos)
+        sp.write(bytes(str(int(down_deg)) + "," + str(int(up_deg)) + "\n",'UTF-8'))
+
+        sleep(0.05)
+
+def get_message():
     s = sp.read_all()
     c = ''
     if s:
         c = chr(s[0])
-        return c
-    else:
-        return m
+    return c
 
+def send_message():
+    global down_pos
+    global up_pos
+    down_pos_str = str(down_pos)
+    up_pos_str = str(up_pos)
+    send_str = "down:" + down_pos + " up:" + up_pos
+    sp.write(send_str.encode('utf-8'))
+
+import time
+def current_milli_time():
+    return int(round(time.time() * 1000))
+
+
+
+print("connect up motor")
 up=blecontroller.BLEController("ef:23:f5:42:8f:be")#上モータ
+print("connect down motor")
 down=blecontroller.BLEController("fe:e1:8c:0a:7d:a0")#下モータ
 
 executor = ThreadPoolExecutor(max_workers=2)
@@ -65,23 +93,23 @@ down.set_speed(0.5)#radian/sec
 up.set_acc(0.5)#rpm -> radian/sec
 down.set_acc(0.5)#rpm -> radian/sec
 
+up.set_max_torque(0.1)
+down.set_max_torque(0.1)
+
 up.set_led(1, 0, 200, 0)
 down.set_led(1, 0, 200, 0)
 
-up_init_pos = 0.26
-down_init_pos = 3.8
+up_min_deg = -45
+up_max_deg = 90
 
-up_min_deg = -90
-up_max_deg = 45
-
-up_min_pos = utils.deg2rad(up_min_deg) + down_init_pos
-up_max_pos = utils.deg2rad(up_max_deg) + down_init_pos
+up_min_pos = utils.deg2rad(up_min_deg) + up_init_pos
+up_max_pos = utils.deg2rad(up_max_deg) + up_init_pos
 
 print("up init pos:",up_init_pos)
 print("up range:",up_min_pos,up_max_pos)
 
-down_min_deg = -180
-down_max_deg = 180
+down_min_deg = -120
+down_max_deg = 120
 
 down_min_pos = utils.deg2rad(down_min_deg) + down_init_pos
 down_max_pos = utils.deg2rad(down_max_deg) + down_init_pos
@@ -89,68 +117,157 @@ down_max_pos = utils.deg2rad(down_max_deg) + down_init_pos
 print("down init pos:", down_init_pos)
 print("down range:",down_min_pos,down_max_pos)
 
-# deg -180 -- 180 
-down.move_to_pos(down_init_pos)
+def init_pos():
+    error = 0.1
+    global down_pos,up_pos
+    global down_init_pos,up_init_pos
 
-while True:
-    print(down_pos,down_init_pos)
-    if ((down_pos > (down_init_pos - 0.1)) and (down_pos < (down_init_pos + 0.1))):
-        break
-    sleep(0.1)
+    print("start init pos")
 
-# deg -90 -- 45 
-up.move_to_pos(up_init_pos)
+    down.move_to_pos(down_init_pos)
+    sleep(7)
 
-'''
-while True: 
-    if (up_pos > up_init_pos - 0.3 and up_pos < up_init_pos + 0.3):
-        break
-    sleep(0.1)
-'''
+    up.move_to_pos(up_init_pos)
+    sleep(7)
 
-"""
-Exit with key input
-"""
+    print("finish init pos")
+    stop_motor()
 
-print("start")
-while True:
-
-    c = get_message()
-    
-    if c is 'j':
-        down.run_forward()
-        print("down run forward")
-        while True:
-            c = get_message("j")
-            print("down_max_pos:",down_max_pos)
-            if(down_pos > down_max_pos):
-                c = ''
-                print("stop down run forward limit")
-                break
-            if c is not 'j':
-                print("stop down run forward")
-                break
-            sleep(0.1)
-
-    if c is 'l':
-        down.run_reverse()
-        print("down run reverse")
-        while True:
-            c = get_message("l")
-            print("down_min_pos:",down_min_pos)
-            if(down_pos < down_min_pos):
-                c = ''
-                print("stop down run reverse limit")
-                break
-            if c is not 'l':
-                print("stop down run reverse")
-                break
-            sleep(0.1)
-
+def stop_motor():
     up.stop_motor()
     down.stop_motor()
-     
-    sleep(0.2)
 
+init_pos()
+print("control enable")
+while True:
+    #a:init i:up k:down j:left l:right
 
+    c = get_message()
 
+    if c is 'a':
+        init_pos()
+
+    if c is 'i':
+        if(up_pos < up_max_pos):
+            up.run_forward()
+            print("up run forward")
+            start_time = current_milli_time()
+            while True:
+                time_diff = current_milli_time() - start_time
+                #print(time_diff)
+                if (time_diff > TIMEOUT):
+                    print("time out")
+                    c = ''
+                    stop_motor()
+                    break
+
+                c = get_message()
+
+                if c is 'i':
+                    start_time = current_milli_time()
+
+                #print("up_max_pos:",up_max_pos)
+                if(up_pos > up_max_pos):
+                    c = ''
+                    print("stop up run forward limit")
+                    stop_motor()
+                    break
+                if (c is not 'i') and (c is not ''):
+                    print("stop up run forward")
+                    stop_motor()
+                    break
+                sleep(0.05)
+
+    if c is 'k':
+        if(up_pos > up_min_pos):
+            up.run_reverse()
+            print("up run reverse")
+            start_time = current_milli_time()
+            while True:
+                time_diff = current_milli_time() - start_time
+                #print(time_diff)
+                if (time_diff > TIMEOUT):
+                    print("time out")
+                    c = ''
+                    stop_motor()
+                    break
+
+                c = get_message()
+
+                if c is 'k':
+                    start_time = current_milli_time()
+
+                #print("up_min_pos:",up_min_pos)
+                if(up_pos < up_min_pos):
+                    c = ''
+                    print("stop up run reverse limit")
+                    stop_motor()
+                    break
+                if (c is not 'k') and (c is not ''):
+                    print("stop up run reverse")
+                    stop_motor()
+                    break
+                sleep(0.05)
+
+    if c is 'j':
+        if(down_pos < down_max_pos):
+            down.run_forward()
+            print("down run forward")
+            start_time = current_milli_time()
+            while True:
+                time_diff = current_milli_time() - start_time
+                #print(time_diff)
+                if (time_diff > TIMEOUT):
+                    print("time out")
+                    c = ''
+                    stop_motor()
+                    break
+
+                c = get_message()
+
+                if c is 'j':
+                    start_time = current_milli_time()
+
+                #print("down_max_pos:",down_max_pos)
+                if(down_pos > down_max_pos):
+                    c = ''
+                    print("stop down run forward limit")
+                    stop_motor()
+                    break
+                if (c is not 'j') and (c is not ''):
+                    print("stop down run forward")
+                    stop_motor()
+                    break
+                sleep(0.05)
+
+    if c is 'l':
+        if(down_pos > down_min_pos):
+            down.run_reverse()
+            print("down run reverse")
+            start_time = current_milli_time()
+            while True:
+                time_diff = current_milli_time() - start_time
+                #print(time_diff)
+                if (time_diff > TIMEOUT):
+                    print("time out")
+                    c = ''
+                    stop_motor()
+                    break
+
+                c = get_message()
+
+                if c is 'l':
+                    start_time = current_milli_time()
+
+                #print("down_min_pos:",down_min_pos)
+                if(down_pos < down_min_pos):
+                    c = ''
+                    print("stop down run reverse limit")
+                    stop_motor()
+                    break
+                if (c is not 'l') and (c is not ''):
+                    print("stop down run reverse")
+                    stop_motor()
+                    break
+                sleep(0.05)
+    sleep(0.1)
